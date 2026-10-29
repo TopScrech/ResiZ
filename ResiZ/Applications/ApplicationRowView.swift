@@ -5,42 +5,56 @@ struct ApplicationRowView: View {
     @Environment(AppModel.self) private var appModel
     let application: InstalledApplication
     @State private var isEnabled = false
+    @State private var isHovered = false
 
     var body: some View {
         HStack {
             Image(nsImage: NSWorkspace.shared.icon(forFile: application.url.path))
                 .resizable()
                 .scaledToFit()
-                .frame(width: 28, height: 28)
+                .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
 
-            Toggle(isOn: $isEnabled) {
-                VStack(alignment: .leading) {
-                    Text(application.name)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(application.name)
+                    .lineLimit(1)
 
-                    Text(appModel.detail(for: application.id))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                Text(appModel.detail(for: application.id))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(appModel.detail(for: application.id))
             }
-            .toggleStyle(.switch)
-            .onChange(of: isEnabled) {
-                if isEnabled != appModel.isEnabled(application.id) {
-                    appModel.setEnabled(isEnabled, for: application.id)
+
+            Spacer()
+
+            Toggle(application.name, isOn: $isEnabled)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .onChange(of: isEnabled) {
+                    if isEnabled != appModel.isEnabled(application.id) {
+                        appModel.setEnabled(isEnabled, for: application.id)
+                    }
                 }
-            }
         }
-        .padding(.vertical)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(isHovered ? AnyShapeStyle(.quaternary.opacity(0.5)) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 8))
+        .onHover { isHovered = $0 }
         .onChange(of: appModel.isEnabled(application.id), initial: true) {
             isEnabled = appModel.isEnabled(application.id)
         }
         .contextMenu {
-            Button("Use automatic detection", systemImage: "wand.and.stars") {
-                appModel.clearOverride(for: application.id)
+            Button("Show in Finder", systemImage: "folder") {
+                NSWorkspace.shared.activateFileViewerSelecting([application.url])
             }
-            .disabled(!appModel.hasOverride(application.id))
+
+            if application.isCustom {
+                Button("Remove from List", systemImage: "minus.circle", role: .destructive) {
+                    Task { await appModel.removeCustomApplication(application) }
+                }
+            }
         }
     }
 }

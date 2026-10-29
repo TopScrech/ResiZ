@@ -6,30 +6,28 @@ import ApplicationServices
     var applications: [InstalledApplication] = []
     var searchText = ""
     var showsEnabledOnly = false
-    var automaticallyDetects: Bool
     private(set) var isLoading = false
+    private(set) var isDetecting = false
     private(set) var catalogError: String?
     private(set) var hasAccessibilityPermission = false
     private(set) var isShortcutActive = false
     private(set) var lastMessage: String?
     private var overrides: [String: Bool]
+    private var customApplicationPaths: [String]
     private var detections: [String: ApplicationDetection] = [:]
     @ObservationIgnored private let listener = ShortcutListener()
     @ObservationIgnored private let accessibility = WindowAccessibility()
     @ObservationIgnored private var monitorTask: Task<Void, Never>?
-    @ObservationIgnored private var lastDetectionID: String?
-    @ObservationIgnored private var lastDetectionTime = ContinuousClock.now - .seconds(30)
     @ObservationIgnored private var isToggling = false
 
     init() {
         overrides = UserDefaults.standard.dictionary(forKey: "applicationOverrides") as? [String: Bool] ?? [:]
-        automaticallyDetects = UserDefaults.standard.object(forKey: "automaticallyDetects") as? Bool ?? true
+        customApplicationPaths = UserDefaults.standard.stringArray(forKey: "customApplicationPaths") ?? []
         listener.onShortcut = { [weak self] in self?.handleShortcut() ?? false }
         refreshPermission()
         monitorTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.refreshPermission()
-                await self?.detectFrontmostApplication()
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
         }
@@ -49,34 +47,44 @@ import ApplicationServices
         return isShortcutActive ? "Shortcut ready" : "Shortcut listener unavailable"
     }
 
-    func isEnabled(_ id: String) -> Bool {
-        overrides[id] ?? (automaticallyDetects && detections[id] == .needsShortcut)
-    }
-
-    func hasOverride(_ id: String) -> Bool { overrides[id] != nil }
+    func isEnabled(_ id: String) -> Bool { overrides[id] ?? false }
 
     func detail(for id: String) -> String {
-        if let enabled = overrides[id] {
-            return enabled ? "Enabled manually" : "Disabled manually"
-        }
-        guard automaticallyDetects else { return "Automatic detection off" }
-        return detections[id]?.description ?? "Open this app to detect its shortcut"
+        detections[id]?.description ?? (isEnabled(id) ? "Enabled" : "Off")
     }
 
     func setEnabled(_ enabled: Bool, for id: String) {
         overrides[id] = enabled
+        detections[id] = nil
         UserDefaults.standard.set(overrides, forKey: "applicationOverrides")
     }
 
-    func clearOverride(for id: String) {
-        overrides[id] = nil
+    /// Checks running apps once and enables the ones missing Control–Command–F, leaving apps the user turned off alone
+    func detectMissingShortcuts() async {
+        guard hasAccessibilityPermission, !isDetecting else { return }
+        isDetecting = true
+        defer { isDetecting = false }
+        let installed = Set(applications.map(\.id))
+        let running = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular
+                && $0.bundleIdentifier != Bundle.main.bundleIdentifier
+                && installed.contains($0.bundleIdentifier ?? "")
+        }
+        var enabledCount = 0
+        for app in running {
+            guard let id = app.bundleIdentifier else { continue }
+            let result = await accessibility.detect(processID: app.processIdentifier)
+            guard hasAccessibilityPermission else { return }
+            detections[id] = result
+            if result == .needsShortcut, overrides[id] == nil {
+                overrides[id] = true
+                enabledCount += 1
+            }
+        }
         UserDefaults.standard.set(overrides, forKey: "applicationOverrides")
-        lastDetectionID = nil
-    }
-
-    func saveAutomaticDetection() {
-        UserDefaults.standard.set(automaticallyDetects, forKey: "automaticallyDetects")
-        lastDetectionID = nil
+        lastMessage = running.isEmpty
+            ? "Open the apps you want to check, then detect again"
+            : "Checked \(running.count) running apps · enabled \(enabledCount)"
     }
 
     func refreshApplications() async {
@@ -84,13 +92,34 @@ import ApplicationServices
         isLoading = true
         defer { isLoading = false }
         do {
-            applications = try await ApplicationCatalog.discover()
+            applications = try await ApplicationCatalog.discover(customURLs: customApplicationPaths.map { URL(filePath: $0) })
             catalogError = nil
-            lastDetectionID = nil
         } catch is CancellationError {
         } catch {
             catalogError = error.localizedDescription
         }
+    }
+
+    /// Adds apps from any location and turns them on, since picking an app signals the user wants it
+    func addApplications(_ urls: [URL]) async {
+        for url in urls {
+            guard let app = ApplicationCatalog.application(at: url) else { continue }
+            if !customApplicationPaths.contains(url.path) {
+                customApplicationPaths.append(url.path)
+            }
+            setEnabled(true, for: app.id)
+        }
+        UserDefaults.standard.set(customApplicationPaths, forKey: "customApplicationPaths")
+        await refreshApplications()
+    }
+
+    func removeCustomApplication(_ application: InstalledApplication) async {
+        customApplicationPaths.removeAll { $0 == application.url.path }
+        UserDefaults.standard.set(customApplicationPaths, forKey: "customApplicationPaths")
+        overrides[application.id] = nil
+        detections[application.id] = nil
+        UserDefaults.standard.set(overrides, forKey: "applicationOverrides")
+        await refreshApplications()
     }
 
     func refreshPermission() {
@@ -116,22 +145,6 @@ import ApplicationServices
         monitorTask?.cancel()
         listener.stop()
         NSApplication.shared.terminate(nil)
-    }
-
-    private func detectFrontmostApplication() async {
-        guard automaticallyDetects, hasAccessibilityPermission,
-              let app = NSWorkspace.shared.frontmostApplication,
-              let id = app.bundleIdentifier,
-              id != Bundle.main.bundleIdentifier,
-              app.activationPolicy == .regular,
-              overrides[id] == nil else { return }
-        let detectionID = "\(id):\(app.processIdentifier)"
-        guard detectionID != lastDetectionID || ContinuousClock.now - lastDetectionTime > .seconds(20) else { return }
-        lastDetectionID = detectionID
-        lastDetectionTime = .now
-        let result = await accessibility.detect(processID: app.processIdentifier)
-        guard hasAccessibilityPermission else { return }
-        detections[id] = result
     }
 
     private func handleShortcut() -> Bool {
