@@ -1,4 +1,5 @@
 import SwiftUI
+import LaunchAtLogin
 
 struct FooterView: View {
     @Environment(AppModel.self) private var appModel
@@ -34,6 +35,10 @@ struct FooterView: View {
                     Task { await appModel.refreshApplications() }
                 }
                 .disabled(appModel.isLoading)
+
+                Divider()
+
+                LaunchAtLogin.Toggle()
 
                 Divider()
 

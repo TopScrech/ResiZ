@@ -10,18 +10,106 @@
       "Base",
     ],
   },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/TopScrech/swift-update.git",
+      "version": {
+        "up-to-next-major-version": "1.1.2"
+      }
+    },
+    {
+      "kind": "remote",
+      "repository": "https://github.com/SimplyDanny/SwiftLintPlugins",
+      "version": {
+        "up-to-next-major-version": "0.65.1"
+      }
+    },
+    {
+      "kind": "remote",
+      "repository": "https://github.com/TopScrech/LaunchAtLogin",
+      "version": {
+        "up-to-next-major-version": "1.0.2",
+      },
+    },
+  ],
   "files": [
+    {
+      "path": ".swiftlint.yml"
+    },
     { "kind": "folder", "path": "ResiZ", "target-membership": [ "ResiZ" ] },
     {
       "kind": "group",
       "name": "Products",
       "children": [
+        {
+          "path": "<PRODUCTS>/Package Update Tools.bundle",
+          "id": "542ECB80E61F4AEF3332C447",
+          "type": "wrapper.cfbundle",
+          "index": false
+        },
         { "path": "<PRODUCTS>/ResiZ.app", "id": "000000000000000000000120", "type": "wrapper.application", "index": false },
       ],
     },
   ],
   "targets": [
     {
+      "name": "Package Update Tools",
+      "id": "D637FA693E67F5B5EF42E417",
+      "product": "id:542ECB80E61F4AEF3332C447",
+      "build-phases": [],
+      "product-type": "bundle",
+      "dependencies": [
+        {
+          "kind": "package",
+          "package": "swift-update",
+          "product-name": "swift-update"
+        }
+      ],
+      "build-settings": {
+        "SDKROOT": "macosx",
+        "SUPPORTED_PLATFORMS": "macosx",
+        "MACOSX_DEPLOYMENT_TARGET": "13.0",
+        "CODE_SIGNING_ALLOWED": "NO",
+        "GENERATE_INFOPLIST_FILE": "YES",
+        "PRODUCT_BUNDLE_IDENTIFIER": "dev.topscrech.ResiZ.PackageUpdateTools",
+        "PRODUCT_NAME": "Package Update Tools",
+        "SKIP_INSTALL": "YES"
+      }
+    },
+    {
+      "name": "Check Package Updates",
+      "id": "13E13AC06062B86716544271",
+      "kind": "aggregate",
+      "dependencies": [
+        "Package Update Tools"
+      ],
+      "build-phases": [
+        {
+          "kind": "script",
+          "name": "Check Package Updates",
+          "run-on-every-build": true,
+          "shell": "/bin/sh",
+          "script": "\"$BUILT_PRODUCTS_DIR/swift-update\" --xcode --path \"$PROJECT_FILE_PATH\" || true"
+        }
+      ],
+      "build-settings": {
+        "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
+        "SDKROOT": "macosx",
+        "SKIP_INSTALL": "YES",
+        "SUPPORTED_PLATFORMS": "macosx"
+      }
+    },
+    {
+      "dependencies": [
+        "Check Package Updates",
+        {
+          "kind": "package",
+          "package": "SwiftLintPlugins",
+          "product-name": "SwiftLintBuildToolPlugin",
+          "product-type": "build-tool-plugin"
+        }
+      ],
       "name": "ResiZ",
       "id": "000000000000000100000000",
       "product": "Products/ResiZ.app",
@@ -30,6 +118,13 @@
         "compile-sources",
         "frameworks",
         "resources",
+      ],
+      "package-product-members": [
+        {
+          "package": "LaunchAtLogin",
+          "product-name": "LaunchAtLogin",
+          "build-phase": { "build-phase": "frameworks" },
+        },
       ],
       "build-settings": {
         "CODE_SIGN_STYLE": "Automatic",

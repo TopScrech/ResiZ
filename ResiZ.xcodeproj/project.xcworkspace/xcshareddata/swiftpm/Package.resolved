@@ -1,0 +1,33 @@
+{
+  "originHash" : "dbd68223cdbf494487935f0bacf4cee1f777b4592da117587e98c39f30975f8c",
+  "pins" : [
+    {
+      "identity" : "launchatlogin",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/TopScrech/LaunchAtLogin",
+      "state" : {
+        "revision" : "f902aeb6cfa478f7cba038de32e9326b7d983d66",
+        "version" : "1.0.2"
+      }
+    },
+    {
+      "identity" : "swift-update",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/TopScrech/swift-update.git",
+      "state" : {
+        "revision" : "a3dedb962391ed50c774e3fc6966098ed5b0d3b0",
+        "version" : "1.1.2"
+      }
+    },
+    {
+      "identity" : "swiftlintplugins",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SimplyDanny/SwiftLintPlugins",
+      "state" : {
+        "revision" : "ef7d692fc6706e8f5628e26bcafaefa445c58a97",
+        "version" : "0.65.1"
+      }
+    }
+  ],
+  "version" : 3
+}
